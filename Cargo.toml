@@ -1,0 +1,18 @@
+[package]
+name = "recursive_reference"
+version = "0.1.0"
+authors = ["Noam Ta Shma <noam.tashma@gmail.com>"]
+edition = "2018"
+keywords = ["recursive-data-structures", "smart-pointer", "reference"]
+categories = ["data-structures"]
+description = "This crate provides a way to walk on recursive structures easily and safely."
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+void = "*"
+
+[lib]
+name = "recursive_reference"
+path = "src/lib.rs"
