@@ -6,3 +6,5 @@ and returning every time you want to go back up, which leads to terrible code.
 
 Instead, you can use the RecRef type, to safely and dynamically walk up
 and down your recursive structure.
+# License
+dual licensed with MIT and APACHE 2.0
