@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-void = "*"
+void = "1.*"
 
 [lib]
 name = "recursive_reference"
