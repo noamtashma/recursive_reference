@@ -15,6 +15,7 @@ and down your recursive structure.
 
 [documentation](https://docs.rs/recursive_reference)
 [crates.io](https://crates.io/crates/recursive_reference)
+[repository](https://github.com/noamtashma/recursive_reference)
 
 # License
 dual licensed with MIT and APACHE 2.0
