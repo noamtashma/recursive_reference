@@ -1,5 +1,5 @@
 //! Recursive reference
-//! This module provides a way to walk on recursive structures easily and safely.
+//! This module provides a way to traverse recursive structures easily and safely.
 //! Rust's lifetime rules will usually force you to either only walk forward through the structure,
 //! or use recursion, calling your method recursively every time you go down a node,
 //! and returning every time you want to go back up, which leads to terrible code.
@@ -18,8 +18,50 @@
 //!    next: List<T>,
 //!}
 //!```
-//! Then we can wrap the RecRef in a struct allowing us to walk up and down
+//!
+//! We can use a RecRef directly:
+//!```
+//! # enum List<T> {
+//! # Root(Box<Node<T>>),
+//! # Empty,
+//! # }
+//! # struct Node<T> {
+//! # value: T,
+//! # next: List<T>,
+//! # }
+//! use recursive_reference::*;
+//!
+//! fn main() -> Result<(), ()> {
+//!     let node1 = Node { value : 5, next : List::Empty };
+//!     let mut node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
+//!     //let mut list = List::Root(Box::new(node2));
+//!
+//!     let mut rec_ref = RecRef::new(&mut node2);
+//!     assert_eq!(rec_ref.value, 2);
+//!     rec_ref.value = 7; // change the value at the head of the list
+//!     rec_ref.extend_result(|node| match &mut node.next {
+//!         List::Root(next_node) => Ok(next_node),
+//!         List::Empty => Err(()),
+//!     })?;
+//!     assert_eq!(rec_ref.value, 5);
+//!     // extend the RecRef
+//!     let res = rec_ref.extend_result(|node| match &mut node.next {
+//!         List::Root(next_node) => Ok(next_node),
+//!         List::Empty => Err(()),
+//!     });
+//!     assert_eq!(res, Err(())); // could not go forward because it reached the end of the list
+//!     assert_eq!(rec_ref.value, 5);
+//!     let last = rec_ref.pop().ok_or(())?;
+//!     assert_eq!(last.value, 5);
+//!     assert_eq!(rec_ref.value, 7) ; // we changed the value at the head of the list
+//!     Ok(())
+//! }
+//!```
+//!
+//! We can also wrap a RecRef in a struct allowing us to walk up and down
 //! our list:
+//! (Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
+//! at the empty end of the list)
 //!```
 //! # enum List<T> {
 //! # Root(Box<Node<T>>),
@@ -63,22 +105,23 @@
 //!     }
 //! }
 //!
-//! fn main() {
+//! fn main() -> Result<(), ()> {
 //!     let node1 = Node { value : 5, next : List::Empty };
 //!     let node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
 //!     let mut list = List::Root(Box::new(node2));
 //!
 //!     let mut walker = Walker::new(&mut list);
 //!     assert_eq!(walker.value_mut().cloned(), Some(2));
-//!     *walker.value_mut().unwrap() = 7;
-//!     walker.next().unwrap();
+//!     *walker.value_mut().ok_or(())? = 7;
+//!     walker.next().ok_or(())?;
 //!     assert_eq!(walker.value_mut().cloned(), Some(5));
-//!     walker.next().unwrap();
+//!     walker.next().ok_or(())?;
 //!     assert_eq!(walker.value_mut().cloned(), None); // end of the list
-//!     walker.prev().unwrap();
+//!     walker.prev().ok_or(())?;
 //!     assert_eq!(walker.value_mut().cloned(), Some(5));
-//!     walker.prev().unwrap();
+//!     walker.prev().ok_or(())?;
 //!     assert_eq!(walker.value_mut().cloned(), Some(7)); // we changed the value at the head
+//!     Ok(())
 //! }
 //!```
 //! This works by having a stack of references in the RecRef. You can do these toperations:
@@ -132,6 +175,7 @@ pub const NO_VALUE_ERROR: &str = "invariant violated: RecRef can't be empty";
 pub const NULL_POINTER_ERROR: &str = "error! somehow got null pointer";
 
 impl<'a, T: ?Sized> RecRef<'a, T> {
+    /// Creates a new RecRef containing only a single reference.
     pub fn new(r: &'a mut T) -> Self {
         RecRef {
             head: r as *mut T,
@@ -140,6 +184,9 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         }
     }
 
+    /// Returns the size of the RecRef, i.e, the amount of references in it.
+    /// I increases every time you extend the RecRef, and decreases every time you pop
+    /// the RecRef.
     pub fn size(&self) -> usize {
         self.vec.len() + 1
     }
@@ -266,7 +313,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     }
 
     /// Push another reference to the RecRef, unrelated to the current one.
-    /// rec_ref.push(new_ref)` is morally equivalent to rec_ref.extend_result_precise(move |_, _| { Ok(new_ref) })`.
+    /// `rec_ref.push(new_ref)` is morally equivalent to `rec_ref.extend_result_precise(move |_, _| { Ok(new_ref) })`.
     /// However, you might have some trouble making the anonymous function conform to the
     /// right type.
     pub fn push(&mut self, r: &'a mut T) {
@@ -290,11 +337,11 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
 
     /// Lets the user use the last reference for some time, and discards it completely.
     /// After the user uses it, the next time they inspect the RecRef, it won't be there.
-    /// Can't pop the last reference, as the RecRef can't be empty, and returns `None` instead.
+    /// If the RecRef has only one reference left, this returns `None`, because
+    /// the RecRef can't be empty.
     pub fn pop(&mut self) -> Option<&mut T> {
         let res = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
         self.head = self.vec.pop()?; // We can't pop the original reference. In that case, Return None.
-
         Some(res)
     }
 
@@ -305,19 +352,6 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     ///   invalid RecRef. [`Self::into_ref`] will.
     pub fn into_ref(self) -> &'a mut T {
         unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR)
-    }
-
-    /// Gets the [`std::ptr::NonNull`] pointer that is i'th from the top of the RecRef.
-    /// The intended usage is for using the pointers as the inputs to `ptr_eq`.
-    /// However, using the pointers themselves (which requires `unsafe`) will almost definitely
-    /// break rust's guarantees.
-    pub fn get_nonnull(&self, i: usize) -> std::ptr::NonNull<T> {
-        let ptr = if i == 0 {
-            self.head
-        } else {
-            self.vec[self.vec.len() - i]
-        };
-        std::ptr::NonNull::new(ptr).expect(NULL_POINTER_ERROR)
     }
 }
 
@@ -333,6 +367,18 @@ impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
         unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR)
     }
 }
+
+impl<'a, T : ?Sized> AsRef<T> for RecRef<'a, T> {
+    fn as_ref(&self) -> &T {
+        &*self
+    }
+}
+
+impl<'a, T: ?Sized> AsMut<T> for RecRef<'a, T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut *self
+    }
+} 
 
 impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
     fn from(r: &'a mut T) -> Self {

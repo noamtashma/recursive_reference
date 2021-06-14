@@ -5,7 +5,7 @@
 [Docs version]: https://docs.rs/recursive_reference/badge.svg
 [docs]: https://docs.rs/recursive_reference/
 
-This crate provides a way to walk on recursive structures easily and safely.
+This crate provides a way to traverse recursive structures easily and safely.
 Rust's lifetime rules will usually force you to either only walk forward through the structure,
 or use recursion, calling your method recursively every time you go down a node,
 and returning every time you want to go back up, which leads to terrible code.
