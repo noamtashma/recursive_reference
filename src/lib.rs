@@ -1,8 +1,9 @@
-//! Recursive reference
+//! Recursive reference.
+//!
 //! This module provides a way to traverse recursive structures easily and safely.
-//! Rust's lifetime rules will usually force you to either only walk forward through the structure,
+//! Rust's lifetime rules will usually force you to either only walk forward through recursive structures,
 //! or use recursion, calling your method recursively every time you go down a node,
-//! and returning every time you want to go back up, which leads to terrible code.
+//! and returning every time you want to go back up.
 //!
 //! Instead, you can use the `RecRef` type, to safely and dynamically walk up
 //! and down your recursive structure.
@@ -34,10 +35,9 @@
 //! fn main() -> Result<(), ()> {
 //!     let node1 = Node { value : 5, next : List::Empty };
 //!     let mut node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
-//!     //let mut list = List::Root(Box::new(node2));
 //!
 //!     let mut rec_ref = RecRef::new(&mut node2);
-//!     assert_eq!(rec_ref.value, 2);
+//!     assert_eq!(rec_ref.value, 2); // rec_Ref is a smart pointer to the current node
 //!     rec_ref.value = 7; // change the value at the head of the list
 //!     rec_ref.extend_result(|node| match &mut node.next {
 //!         List::Root(next_node) => Ok(next_node),
@@ -53,13 +53,13 @@
 //!     assert_eq!(rec_ref.value, 5);
 //!     let last = rec_ref.pop().ok_or(())?;
 //!     assert_eq!(last.value, 5);
-//!     assert_eq!(rec_ref.value, 7) ; // we changed the value at the head of the list
+//!     assert_eq!(rec_ref.value, 7) ; // moved back to the head of the list because we popped rec_ref
 //!     Ok(())
 //! }
 //!```
 //!
 //! We can also wrap a RecRef in a struct allowing us to walk up and down
-//! our list:
+//! our list
 //! (Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
 //! at the empty end of the list)
 //!```
@@ -124,32 +124,33 @@
 //!     Ok(())
 //! }
 //!```
-//! This works by having a stack of references in the RecRef. You can do these toperations:
-//! * You can always use the current reference.
-//!  that is, the current reference - the RecRef is a smart pointer to it.
-//! * using [`extend`][RecRef::extend], freeze the current reference
+//! RecRef works by storing internally a stack of references.
+//! You can do these toperations with a RecRef:
+//! * You can always use the current reference (i.e, the top reference).
+//!  the RecRef is a smart pointer to it.
+//! * using [`extend`][RecRef::extend] and similar functions, freeze the current reference
 //!  and extend the RecRef with a new reference derived from it.
-//!  for example, pushing to the stack the child of the current node.
-//! * pop the stack to get back to the previous references, unfreezing them.
+//!  for example, push to the stack a reference to the child of the current node.
+//! * pop the stack to get back to the previous reference, unfreezing it.
 //!
 //! # Safety
 //! The RecRef type is implemented using unsafe rust, but provides a safe interface.
 //!
 //! The RecRef obeys rust's borrowing rules, by simulating freezing. Whenever
-//! you extend the RecRef with a reference `child_ref` that is derived from the current
+//! you extend a RecRef with a reference `child_ref` that is derived from the current
 //! reference `parent_ref`, the RecRef freezes `parent_ref`, and no longer allows
 //! `parent_ref` to be used.
 //! When `child_ref` will be popped from the RecRef,
 //! `parent_ref` will be allowed to be used again.
 //!
 //! This is essentially the same as what would have happened if you wrote your functions recursively,
-//! but decoupled from the actual call stack.
+//! but it's decoupled from the actual call stack.
 //!
 //! Another important point to consider is the safety of
 //! the actual call to [`extend`][RecRef::extend] : see its documentation.
 //!
 //! Internally, the RecRef keeps a stack of pointers, instead of reference, in order not
-//! to violate rust's invariants.
+//! to violate rust's aliasing invariants.
 
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -184,56 +185,52 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         }
     }
 
-    /// Returns the size of the RecRef, i.e, the amount of references in it.
-    /// I increases every time you extend the RecRef, and decreases every time you pop
-    /// the RecRef.
+    /// Returns the size of `self`, i.e, the amount of references in it.
+    /// It increases every time you extend `self`, and decreases every time you pop
+    /// `self`.
     pub fn size(&self) -> usize {
         self.vec.len() + 1
     }
 
-    /// This function extends the RecRef one time. That means, if the current
-    /// reference is `current_ref: &mut T`, then this call extends the RecRef
+    /// This function extends `self` one time. If the current
+    /// reference is `current_ref: &mut T`, then this call extends `self`
     /// with the new reference `ref2: &mut T = func(current_ref)`.
-    /// After this call, the RecRef will expose the new `ref2`, and `current_ref`
+    /// After this call, `self` will expose the new `ref2`, and `current_ref`
     /// will be frozen (As it is borrowed by `ref2`), until `ref2` is
     /// popped off, unfreezing `current_ref`.
     ///
     /// # Safety:
-    /// The type ensures no leaking is possible, since `func` can't guarantee that
-    /// `current_ref` will live for any length of time, so it can't leak it anywhere.
-    /// It can only use `current_ref` inside the function, and use it in order to return `ref2`, which is the
+    /// Pay close attention to the type of `func`: we require that
+    /// `F: for<'b> FnOnce(&'b mut T) -> &'b mut T`. That is, for every lifetime `'b`,
+    /// we require that `F: FnOnce(&'b mut T) -> &'b mut T`.
+    ///
+    /// Let's define `'freeze_time` to be the time `ref2` will be in the RecRef.
+    /// That is, `'freeze_time`
+    /// is the time for which `ref2` will live, and the lifetime in which `current_ref`
+    /// will be frozen by `ref2`. Then, the type of `func` should have been
+    /// `FnOnce(&'freeze_time mut T) -> &'freeze_time mut T`. If that woudld have been the type
+    /// of `func`, the code would've followed rust's borrowing rules correctly.
+    ///
+    /// However, we can't know yet what that
+    /// lifetime is: it will be whatever amount of time passes until the programmer decides
+    /// to pop `ref2` out of the RecRef. And that hasn't even been decided at this point.
+    /// Whatever lifetime `'freeze_time` that turns out to be, we will know
+    /// after-the-fact that the type of `func` should have been
+    /// `FnOnce(&'freeze_time mut T) -> &'freeze_time mut T`.
+    ///
+    /// Therefore, the solution is to require that `func` will be able to work with any value of
+    /// `'freeze_time`. Then we can be
+    /// sure that the code would've worked correctly if we put the correct lifetime there.
+    /// Therefore, we can always pick correct lifetimes after-the-fact, so the code must be safe.
+    ///
+    /// Also note:
+    /// The type ensures that the current reference can't be leaked outside of `func`. 
+    /// `func` can't guarantee that
+    /// `current_ref` will live for any length of time, so it can't store it outside anywhere
+    /// or give it to anything.
+    /// It can only use `current_ref` while still inside `func`,
+    /// and use it in order to return `ref2`, which is the
     /// intended usage.
-    ///
-    /// A different point of view is this: we have to borrow `current_ref` to `func`
-    /// with the actual correct lifetime: the lifetime in which it is allowed to
-    /// freeze `current_ref` in order to use `ref2`.
-    ///
-    /// However, we don't know yet what that
-    /// lifetime is: it will be whatever amount of time passes until `ref2` will be
-    /// popped back, unfreezing `current_ref`. (and that lifetime can even be decided dynamically).
-    /// Whatever lifetime `'freeze_time` that turns out to be, the type of `func` should have been
-    /// `func: FnOnce(&'freeze_time mut T) -> &'freeze_time mut T`.
-    ///
-    /// Therefore, we require that `func` will be able to work with any value of `'freeze_time`, so we
-    /// are sure that the code would've worked correctly if we put the correct lifetime there.
-    /// So that ensures the code is safe.
-    ///
-    /// Another point of view is considering what other types we could have given to this function:
-    /// If the type was just
-    /// ```rust,ignore
-    /// fn extend<'a, F : FnOnce(&'a mut T) -> &'a mut T>(&mut self, func : F)
-    /// ```
-    /// then this function would be unsafe,
-    /// because `func` could leak the reference outside, and then the caller could immediately
-    /// pop the RecRef to get another copy of the same reference.
-    ///
-    /// We could use
-    /// ```rust,ignore
-    /// fn extend<'a, F : FnOnce(&'a mut T) -> &'a mut T>(&'a mut self, func : F)
-    /// ```
-    ///
-    /// But that would invalidate the whole point of using the RecRef - You couldn't
-    /// use it after extending even once, and it couldn't be any better than a regular mutable reference.
     pub fn extend<F>(&mut self, func: F)
     where
         F: for<'b> FnOnce(&'b mut T) -> &'b mut T,
@@ -255,11 +252,12 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
-        // The compiler has to be told explicitly that the lifetime is `'a`.
-        // Otherwise the lifetime is left unconstrained.
-        // It probably doesn't matter much in practice, since we specifically require `func` to be able to work
+        // The compiler is told explicitly that the lifetime is `'a`.
+        // Otherwise the minimal lifetime possible is chosen.
+        // It probably doesn't matter, since we specifically require `func` to be able to work
         // with any lifetime, and the references are converted to pointers immediately.
-        // However, that is the "most correct" lifetime - its actual lifetime may be anything up to `'a`,
+        // However, that is the "most correct" lifetime - the reference's actual lifetime may
+        // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
         let head_ref: &'a mut T = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
 
@@ -295,11 +293,12 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
-        // The compiler has to be told explicitly that the lifetime is `'a`.
-        // Otherwise the lifetime is left unconstrained.
-        // It probably doesn't matter much in practice, since we specifically require `func` to be able to work
+        // The compiler is told explicitly that the lifetime is `'a`.
+        // Otherwise the minimal lifetime possible is chosen.
+        // It probably doesn't matter, since we specifically require `func` to be able to work
         // with any lifetime, and the references are converted to pointers immediately.
-        // However, that is the "most correct" lifetime - its actual lifetime may be anything up to `'a`,
+        // However, that is the "most correct" lifetime - the reference's actual lifetime may
+        // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
         let head_ref: &'a mut T = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
 
