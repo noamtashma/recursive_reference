@@ -163,6 +163,9 @@ use void::ResultVoidExt;
 /// A Recursive reference.
 /// This struct is used to allow recursively reborrowing mutable references in a dynamic
 /// but safe way.
+///
+/// `RecRef<'a, T>` represents a reference to a value of type `T`, with lifetime `'a`,
+/// which can move recursively into and out of its subfields of the same type `T`.
 pub struct RecRef<'a, T: ?Sized> {
     head: *mut T,
     vec: Vec<*mut T>,
@@ -171,6 +174,7 @@ pub struct RecRef<'a, T: ?Sized> {
 
 // TODO: consider converting the pointers to values without checking for null values.
 // it's supposed to work, since the pointers only ever come from references.
+// otherwise, when 1.53 rolls out, convert to `NonNull`.
 
 // these aren't ever supposed to happen. but since we touch unsafe code, we might as well
 // have clear error message when we `expect()`
@@ -190,6 +194,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// Returns the size of `rec_ref`, i.e, the amount of references in it.
     /// It increases every time you extend `rec_ref`, and decreases every time you pop
     /// `rec_ref`.
+    /// The size of a new RecRef is always `1`.
     pub fn size(rec_ref: &Self) -> usize {
         rec_ref.vec.len() + 1
     }
@@ -356,6 +361,9 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     }
 }
 
+/// `RecRef<T>` represents a reference to a value of type `T`,
+/// which can move recursively into and out of its subfields of the same type `T`.
+/// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
@@ -363,6 +371,9 @@ impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
     }
 }
 
+/// `RecRef<T>` represents a reference to a value of type `T`,
+/// which can move recursively into and out of its subfields of the same type `T`.
+/// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR)
