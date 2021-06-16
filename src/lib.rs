@@ -396,3 +396,17 @@ impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
         Self::new(r)
     }
 }
+
+/// #Safety:
+/// A `RecRef` acts like a `&mut T`, and contains a `Vec`.
+/// these are `Send` (`Vec<*mut T>` is not `Send` because
+/// it contains `*mut T`, but its implementation is still safe to send).
+/// Thus `RecRef` should be `Send`.
+unsafe impl<'a, T: ?Sized + Send> Send for RecRef<'a, T> {}
+
+/// #Safety:
+/// A `RecRef` acts like a `&mut T`, and contains a `Vec`.
+/// these are `Sync` (`Vec<*mut T>` is not `Sync` because
+/// it contains `*mut T`, but its implementation is still safe to sync).
+/// Thus `RecRef` should be `Sync`.
+unsafe impl<'a, T: ?Sized + Sync> Sync for RecRef<'a, T> {}
