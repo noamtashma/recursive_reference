@@ -8,9 +8,7 @@ categories = ["data-structures"]
 description = "This crate provides a way to walk on recursive structures easily and safely."
 readme = "README.md"
 repository = "https://github.com/noamtashma/recursive_reference"
-homepage = "https://github.com/noamtashma/recursive_reference"
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/recursive_reference/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
