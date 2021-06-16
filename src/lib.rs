@@ -178,8 +178,7 @@ pub struct RecRef<'a, T: ?Sized> {
 
 // these aren't ever supposed to happen. but since we touch unsafe code, we might as well
 // have clear error message when we `expect()`
-pub const NO_VALUE_ERROR: &str = "invariant violated: RecRef can't be empty";
-pub const NULL_POINTER_ERROR: &str = "error! somehow got null pointer";
+const NULL_POINTER_ERROR: &str = "error! somehow got null pointer";
 
 impl<'a, T: ?Sized> RecRef<'a, T> {
     /// Creates a new RecRef containing only a single reference.
