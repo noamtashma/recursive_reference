@@ -1,3 +1,5 @@
+#![doc(html_root_url = "https://docs.rs/recursive_reference/0.1.1/recursive_reference/")]
+
 //! Recursive reference.
 //!
 //! This module provides a way to traverse recursive structures easily and safely.
