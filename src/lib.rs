@@ -185,17 +185,17 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         }
     }
 
-    /// Returns the size of `self`, i.e, the amount of references in it.
-    /// It increases every time you extend `self`, and decreases every time you pop
-    /// `self`.
-    pub fn size(&self) -> usize {
-        self.vec.len() + 1
+    /// Returns the size of `rec_ref`, i.e, the amount of references in it.
+    /// It increases every time you extend `rec_ref`, and decreases every time you pop
+    /// `rec_ref`.
+    pub fn size(rec_ref: &Self) -> usize {
+        rec_ref.vec.len() + 1
     }
 
-    /// This function extends `self` one time. If the current
-    /// reference is `current_ref: &mut T`, then this call extends `self`
+    /// This function extends `rec_ref` one time. If the current
+    /// reference is `current_ref: &mut T`, then this call extends `rec_ref`
     /// with the new reference `ref2: &mut T = func(current_ref)`.
-    /// After this call, `self` will expose the new `ref2`, and `current_ref`
+    /// After this call, `rec_ref` will expose the new `ref2`, and `current_ref`
     /// will be frozen (As it is borrowed by `ref2`), until `ref2` is
     /// popped off, unfreezing `current_ref`.
     ///
@@ -224,31 +224,31 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// Therefore, we can always pick correct lifetimes after-the-fact, so the code must be safe.
     ///
     /// Also note:
-    /// The type ensures that the current reference can't be leaked outside of `func`. 
+    /// The type ensures that the current reference can't be leaked outside of `func`.
     /// `func` can't guarantee that
     /// `current_ref` will live for any length of time, so it can't store it outside anywhere
     /// or give it to anything.
     /// It can only use `current_ref` while still inside `func`,
     /// and use it in order to return `ref2`, which is the
     /// intended usage.
-    pub fn extend<F>(&mut self, func: F)
+    pub fn extend<F>(rec_ref: &mut Self, func: F)
     where
         F: for<'b> FnOnce(&'b mut T) -> &'b mut T,
     {
-        self.extend_result(|r| Ok(func(r))).void_unwrap()
+        Self::extend_result(rec_ref, |r| Ok(func(r))).void_unwrap()
     }
 
     /// Same as [`Self::extend`], but allows the function to return an error value.
-    pub fn extend_result<E, F>(&mut self, func: F) -> Result<(), E>
+    pub fn extend_result<E, F>(rec_ref: &mut Self, func: F) -> Result<(), E>
     where
         F: for<'b> FnOnce(&'b mut T) -> Result<&'b mut T, E>,
     {
-        self.extend_result_precise(|r, _phantom| func(r))
+        Self::extend_result_precise(rec_ref, |r, _phantom| func(r))
     }
 
     /// Same as [`Self::extend`], but allows the function to return an error value,
     /// and also tells the inner function that `'a : 'b` using a phantom argument.
-    pub fn extend_result_precise<E, F>(&mut self, func: F) -> Result<(), E>
+    pub fn extend_result_precise<E, F>(rec_ref: &mut Self, func: F) -> Result<(), E>
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
@@ -259,11 +259,11 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
-        let head_ref: &'a mut T = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
-                self.push(p);
+                Self::push(rec_ref, p);
                 Ok(())
             }
             Err(e) => Err(e),
@@ -272,24 +272,24 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
 
     /// This function maps the top of the RecRef. It's similar to [`Self::extend`], but
     /// it replaces the current reference instead of keeping it. See [`Self::extend`] for more details.
-    pub fn map<F>(&mut self, func: F)
+    pub fn map<F>(rec_ref: &mut Self, func: F)
     where
         F: for<'b> FnOnce(&'b mut T) -> &'b mut T,
     {
-        self.map_result(|r| Ok(func(r))).void_unwrap()
+        Self::map_result(rec_ref, |r| Ok(func(r))).void_unwrap()
     }
 
     /// Same as [`Self::map`], but allows the function to return an error value.
-    pub fn map_result<E, F>(&mut self, func: F) -> Result<(), E>
+    pub fn map_result<E, F>(rec_ref: &mut Self, func: F) -> Result<(), E>
     where
         F: for<'b> FnOnce(&'b mut T) -> Result<&'b mut T, E>,
     {
-        self.map_result_precise(|r, _| func(r))
+        Self::map_result_precise(rec_ref, |r, _| func(r))
     }
 
     /// Same as [`Self::map`], but allows the function to return an error value,
     /// and also tells the inner function that `'a : 'b` using a phantom argument.
-    pub fn map_result_precise<E, F>(&mut self, func: F) -> Result<(), E>
+    pub fn map_result_precise<E, F>(rec_ref: &mut Self, func: F) -> Result<(), E>
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
@@ -300,11 +300,11 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
-        let head_ref: &'a mut T = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
-                self.head = p as *mut T;
+                rec_ref.head = p as *mut T;
                 Ok(())
             }
             Err(e) => Err(e),
@@ -315,20 +315,20 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// `rec_ref.push(new_ref)` is morally equivalent to `rec_ref.extend_result_precise(move |_, _| { Ok(new_ref) })`.
     /// However, you might have some trouble making the anonymous function conform to the
     /// right type.
-    pub fn push(&mut self, r: &'a mut T) {
-        self.vec.push(self.head);
-        self.head = r as *mut T;
+    pub fn push(rec_ref: &mut Self, r: &'a mut T) {
+        rec_ref.vec.push(rec_ref.head);
+        rec_ref.head = r as *mut T;
 
-        /* alternative definition using a call to `self.extend_result_precise`.
+        /* alternative definition using a call to `extend_result_precise`.
         // in order to name 'x, replace the signature with:
-        // pub fn push<'x>(&'x mut self, r : &'a mut T) {
+        // pub fn push<'x>(rec_ref: &'x mut Self, r : &'a mut T) {
         // this is used in order to tell the closure to conform to the right type
         fn helper<'a,'x, T : ?Sized, F> (f : F) -> F where
                 F : for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>)
                 -> Result<&'b mut T, void::Void> + 'x
             { f }
 
-        self.extend_result_precise(
+        Self::extend_result_precise(rec_ref,
             helper::<'a,'x>(move |_, _phantom| { Ok(r) })
         ).void_unwrap();
         */
@@ -338,9 +338,9 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// After the user uses it, the next time they inspect the RecRef, it won't be there.
     /// If the RecRef has only one reference left, this returns `None`, because
     /// the RecRef can't be empty.
-    pub fn pop(&mut self) -> Option<&mut T> {
-        let res = unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR);
-        self.head = self.vec.pop()?; // We can't pop the original reference. In that case, Return None.
+    pub fn pop(rec_ref: &mut Self) -> Option<&mut T> {
+        let res = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        rec_ref.head = rec_ref.vec.pop()?; // We can't pop the original reference. In that case, Return None.
         Some(res)
     }
 
@@ -349,8 +349,8 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// * This will consume the RecRef
     /// * [`Self::pop`] will never pop the first original reference, because that would produce an
     ///   invalid RecRef. [`Self::into_ref`] will.
-    pub fn into_ref(self) -> &'a mut T {
-        unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR)
+    pub fn into_ref(rec_ref: Self) -> &'a mut T {
+        unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR)
     }
 }
 
@@ -367,7 +367,7 @@ impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
     }
 }
 
-impl<'a, T : ?Sized> AsRef<T> for RecRef<'a, T> {
+impl<'a, T: ?Sized> AsRef<T> for RecRef<'a, T> {
     fn as_ref(&self) -> &T {
         &*self
     }
@@ -377,7 +377,7 @@ impl<'a, T: ?Sized> AsMut<T> for RecRef<'a, T> {
     fn as_mut(&mut self) -> &mut T {
         &mut *self
     }
-} 
+}
 
 impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
     fn from(r: &'a mut T) -> Self {
