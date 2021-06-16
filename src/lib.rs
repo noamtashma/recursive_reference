@@ -7,7 +7,7 @@
 //! or use recursion, calling your method recursively every time you go down a node,
 //! and returning every time you want to go back up.
 //!
-//! Instead, you can use the `RecRef` type, to safely and dynamically walk up
+//! Instead, you can use the [`RecRef`] type, to safely and dynamically walk up
 //! and down your recursive structure.
 //!
 //! Say we have a recursive linked list structure:
@@ -22,7 +22,7 @@
 //!}
 //!```
 //!
-//! We can use a RecRef directly:
+//! We can use a [`RecRef`] directly:
 //!```
 //! # enum List<T> {
 //! # Root(Box<Node<T>>),
@@ -60,7 +60,7 @@
 //! }
 //!```
 //!
-//! We can also wrap a RecRef in a struct allowing us to walk up and down
+//! We can also wrap a [`RecRef`] in a struct allowing us to walk up and down
 //! our list
 //! (Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
 //! at the empty end of the list)
@@ -126,23 +126,23 @@
 //!     Ok(())
 //! }
 //!```
-//! RecRef works by storing internally a stack of references.
-//! You can do these toperations with a RecRef:
+//! [`RecRef`] works by storing internally a stack of references.
+//! You can do these toperations with a [`RecRef`]:
 //! * You can always use the current reference (i.e, the top reference).
-//!  the RecRef is a smart pointer to it.
+//!  the [`RecRef`] is a smart pointer to it.
 //! * using [`extend`][RecRef::extend] and similar functions, freeze the current reference
-//!  and extend the RecRef with a new reference derived from it.
+//!  and extend the [`RecRef`] with a new reference derived from it.
 //!  for example, push to the stack a reference to the child of the current node.
 //! * pop the stack to get back to the previous reference, unfreezing it.
 //!
 //! # Safety
-//! The RecRef type is implemented using unsafe rust, but provides a safe interface.
+//! The [`RecRef`] type is implemented using unsafe rust, but provides a safe interface.
 //!
-//! The RecRef obeys rust's borrowing rules, by simulating freezing. Whenever
-//! you extend a RecRef with a reference `child_ref` that is derived from the current
-//! reference `parent_ref`, the RecRef freezes `parent_ref`, and no longer allows
+//! The [`RecRef`] obeys rust's borrowing rules, by simulating freezing. Whenever
+//! you extend a [`RecRef`] with a reference `child_ref` that is derived from the current
+//! reference `parent_ref`, the [`RecRef`] freezes `parent_ref`, and no longer allows
 //! `parent_ref` to be used.
-//! When `child_ref` will be popped from the RecRef,
+//! When `child_ref` will be popped from the [`RecRef`],
 //! `parent_ref` will be allowed to be used again.
 //!
 //! This is essentially the same as what would have happened if you wrote your functions recursively,
@@ -151,7 +151,7 @@
 //! Another important point to consider is the safety of
 //! the actual call to [`extend`][RecRef::extend] : see its documentation.
 //!
-//! Internally, the RecRef keeps a stack of pointers, instead of reference, in order not
+//! Internally, the [`RecRef`] keeps a stack of pointers, instead of reference, in order not
 //! to violate rust's aliasing invariants.
 
 use std::marker::PhantomData;
@@ -193,7 +193,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// Returns the size of `rec_ref`, i.e, the amount of references in it.
     /// It increases every time you extend `rec_ref`, and decreases every time you pop
     /// `rec_ref`.
-    /// The size of a new RecRef is always `1`.
+    /// The size of a new [`RecRef`] is always `1`.
     pub fn size(rec_ref: &Self) -> usize {
         rec_ref.vec.len() + 1
     }
@@ -210,7 +210,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// `F: for<'b> FnOnce(&'b mut T) -> &'b mut T`. That is, for every lifetime `'b`,
     /// we require that `F: FnOnce(&'b mut T) -> &'b mut T`.
     ///
-    /// Let's define `'freeze_time` to be the time `ref2` will be in the RecRef.
+    /// Let's define `'freeze_time` to be the time `ref2` will be in the [`RecRef`].
     /// That is, `'freeze_time`
     /// is the time for which `ref2` will live, and the lifetime in which `current_ref`
     /// will be frozen by `ref2`. Then, the type of `func` should have been
@@ -219,7 +219,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     ///
     /// However, we can't know yet what that
     /// lifetime is: it will be whatever amount of time passes until the programmer decides
-    /// to pop `ref2` out of the RecRef. And that hasn't even been decided at this point.
+    /// to pop `ref2` out of the [`RecRef`]. And that hasn't even been decided at this point.
     /// Whatever lifetime `'freeze_time` that turns out to be, we will know
     /// after-the-fact that the type of `func` should have been
     /// `FnOnce(&'freeze_time mut T) -> &'freeze_time mut T`.
@@ -276,7 +276,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         }
     }
 
-    /// This function maps the top of the RecRef. It's similar to [`Self::extend`], but
+    /// This function maps the top of the [`RecRef`]. It's similar to [`Self::extend`], but
     /// it replaces the current reference instead of keeping it. See [`Self::extend`] for more details.
     pub fn map<F>(rec_ref: &mut Self, func: F)
     where
@@ -317,7 +317,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         }
     }
 
-    /// Push another reference to the RecRef, unrelated to the current one.
+    /// Push another reference to the [`RecRef`], unrelated to the current one.
     /// `rec_ref.push(new_ref)` is morally equivalent to `rec_ref.extend_result_precise(move |_, _| { Ok(new_ref) })`.
     /// However, you might have some trouble making the anonymous function conform to the
     /// right type.
@@ -341,26 +341,26 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     }
 
     /// Lets the user use the last reference for some time, and discards it completely.
-    /// After the user uses it, the next time they inspect the RecRef, it won't be there.
-    /// If the RecRef has only one reference left, this returns `None`, because
-    /// the RecRef can't be empty.
+    /// After the user uses it, the next time they inspect the [`RecRef`], it won't be there.
+    /// If the [`RecRef`] has only one reference left, this returns `None`, because
+    /// the [`RecRef`] can't be empty.
     pub fn pop(rec_ref: &mut Self) -> Option<&mut T> {
         let res = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
         rec_ref.head = rec_ref.vec.pop()?; // We can't pop the original reference. In that case, Return None.
         Some(res)
     }
 
-    /// Discards the RecRef and returns the last reference.
+    /// Discards the [`RecRef`] and returns the last reference.
     /// The difference between this and using [`Self::pop`] are:
-    /// * This will consume the RecRef
+    /// * This will consume the [`RecRef`]
     /// * [`Self::pop`] will never pop the first original reference, because that would produce an
-    ///   invalid RecRef. [`Self::into_ref`] will.
+    ///   invalid [`RecRef`]. [`Self::into_ref`] will.
     pub fn into_ref(rec_ref: Self) -> &'a mut T {
         unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR)
     }
 }
 
-/// `RecRef<T>` represents a reference to a value of type `T`,
+/// [`RecRef<T>`] represents a reference to a value of type `T`,
 /// which can move recursively into and out of its subfields of the same type `T`.
 /// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
@@ -370,7 +370,7 @@ impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
     }
 }
 
-/// `RecRef<T>` represents a reference to a value of type `T`,
+/// [`RecRef<T>`] represents a reference to a value of type `T`,
 /// which can move recursively into and out of its subfields of the same type `T`.
 /// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
@@ -397,16 +397,16 @@ impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
     }
 }
 
-/// #Safety:
-/// A `RecRef` acts like a `&mut T`, and contains a `Vec`.
+/// # Safety:
+/// A [`RecRef`] acts like a `&mut T`, and contains a `Vec`.
 /// these are `Send` (`Vec<*mut T>` is not `Send` because
 /// it contains `*mut T`, but its implementation is still safe to send).
-/// Thus `RecRef` should be `Send`.
+/// Thus [`RecRef`] should be `Send`.
 unsafe impl<'a, T: ?Sized + Send> Send for RecRef<'a, T> {}
 
-/// #Safety:
-/// A `RecRef` acts like a `&mut T`, and contains a `Vec`.
+/// # Safety:
+/// A [`RecRef`] acts like a `&mut T`, and contains a `Vec`.
 /// these are `Sync` (`Vec<*mut T>` is not `Sync` because
 /// it contains `*mut T`, but its implementation is still safe to sync).
-/// Thus `RecRef` should be `Sync`.
+/// Thus [`RecRef`] should be `Sync`.
 unsafe impl<'a, T: ?Sized + Sync> Sync for RecRef<'a, T> {}
