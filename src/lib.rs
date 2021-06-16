@@ -41,19 +41,19 @@
 //!     let mut rec_ref = RecRef::new(&mut node2);
 //!     assert_eq!(rec_ref.value, 2); // rec_Ref is a smart pointer to the current node
 //!     rec_ref.value = 7; // change the value at the head of the list
-//!     rec_ref.extend_result(|node| match &mut node.next {
+//!     RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
 //!         List::Root(next_node) => Ok(next_node),
 //!         List::Empty => Err(()),
 //!     })?;
 //!     assert_eq!(rec_ref.value, 5);
 //!     // extend the RecRef
-//!     let res = rec_ref.extend_result(|node| match &mut node.next {
+//!     let res = RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
 //!         List::Root(next_node) => Ok(next_node),
 //!         List::Empty => Err(()),
 //!     });
 //!     assert_eq!(res, Err(())); // could not go forward because it reached the end of the list
 //!     assert_eq!(rec_ref.value, 5);
-//!     let last = rec_ref.pop().ok_or(())?;
+//!     let last = RecRef::pop(&mut rec_ref).ok_or(())?;
 //!     assert_eq!(last.value, 5);
 //!     assert_eq!(rec_ref.value, 7) ; // moved back to the head of the list because we popped rec_ref
 //!     Ok(())
@@ -86,7 +86,7 @@
 //!
 //!     /// Returns `None` when at the tail end of the list
 //!     pub fn next(&mut self) -> Option<()> {
-//!         self.rec_ref.extend_result(|current| match current {
+//!         RecRef::extend_result(&mut self.rec_ref, |current| match current {
 //!             List::Empty => Err(()),
 //!             List::Root(node) => Ok(&mut node.next),
 //!         }).ok()
@@ -94,7 +94,7 @@
 //!
 //!     /// Returns `None` when at the head of the list
 //!     pub fn prev(&mut self) -> Option<()> {
-//!         self.rec_ref.pop()?;
+//!         RecRef::pop(&mut self.rec_ref)?;
 //!         Some(())
 //!     }
 //!
