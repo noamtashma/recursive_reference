@@ -379,15 +379,15 @@ impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> AsRef<T> for RecRef<'a, T> {
-    fn as_ref(&self) -> &T {
-        &*self
+impl<'a, Q: ?Sized, T: ?Sized + AsRef<Q>> AsRef<Q> for RecRef<'a, T> {
+    fn as_ref(&self) -> &Q {
+        AsRef::as_ref(&**self)
     }
 }
 
-impl<'a, T: ?Sized> AsMut<T> for RecRef<'a, T> {
-    fn as_mut(&mut self) -> &mut T {
-        &mut *self
+impl<'a, Q: ?Sized, T: ?Sized + AsMut<Q>> AsMut<Q> for RecRef<'a, T> {
+    fn as_mut(&mut self) -> &mut Q {
+        AsMut::as_mut(&mut **self)
     }
 }
 
