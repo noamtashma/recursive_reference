@@ -1,5 +1,3 @@
-#![doc(html_root_url = "https://docs.rs/recursive_reference/0.1.1/recursive_reference/")]
-
 //! Recursive reference.
 //!
 //! This module provides a way to traverse recursive structures easily and safely.
@@ -154,12 +152,17 @@
 //! Internally, the [`RecRef`] keeps a stack of pointers, instead of reference, in order not
 //! to violate rust's aliasing invariants.
 
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::ops::DerefMut;
+#![no_std]
+#![doc(html_root_url = "https://docs.rs/recursive_reference/0.1.1/recursive_reference/")]
+
+extern crate alloc;
+use alloc::vec::*;
+
+use core::marker::PhantomData;
+use core::ops::Deref;
+use core::ops::DerefMut;
 use void::ResultVoidExt;
 
-// TODO: switch to `NonNull` when rust 1.53 arrives.
 /// A Recursive reference.
 /// This struct is used to allow recursively reborrowing mutable references in a dynamic
 /// but safe way.
@@ -185,7 +188,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     pub fn new(r: &'a mut T) -> Self {
         RecRef {
             head: r as *mut T,
-            vec: vec![],
+            vec: Vec::new(),
             phantom: PhantomData,
         }
     }
@@ -402,11 +405,11 @@ impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
 /// these are `Send` (`Vec<*mut T>` is not `Send` because
 /// it contains `*mut T`, but its implementation is still safe to send).
 /// Thus [`RecRef`] should be `Send`.
-unsafe impl<'a, T: ?Sized + Send> Send for RecRef<'a, T> {}
+unsafe impl<'a, T: ?Sized + Send> Send for RecRef<'a, T> where Vec<&'a mut T>: Send {}
 
 /// # Safety:
 /// A [`RecRef`] acts like a `&mut T`, and contains a `Vec`.
 /// these are `Sync` (`Vec<*mut T>` is not `Sync` because
 /// it contains `*mut T`, but its implementation is still safe to sync).
 /// Thus [`RecRef`] should be `Sync`.
-unsafe impl<'a, T: ?Sized + Sync> Sync for RecRef<'a, T> {}
+unsafe impl<'a, T: ?Sized + Sync> Sync for RecRef<'a, T> where Vec<&'a mut T>: Sync {}

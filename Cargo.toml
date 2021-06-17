@@ -1,10 +1,10 @@
 [package]
 name = "recursive_reference"
-version = "0.1.1"
+version = "0.1.1" # remember to bump the html_root_url as well
 authors = ["Noam Ta Shma <noam.tashma@gmail.com>"]
 edition = "2018"
 keywords = ["recursive", "data-structures", "smart-pointer", "reference"]
-categories = ["data-structures"]
+categories = ["data-structures", "no-std"]
 description = "This crate provides a way to walk on recursive structures easily and safely."
 readme = "README.md"
 repository = "https://github.com/noamtashma/recursive_reference"
@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-void = "1.*"
+void = "1.0"
 
 [lib]
 name = "recursive_reference"
