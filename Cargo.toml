@@ -1,6 +1,6 @@
 [package]
 name = "recursive_reference"
-version = "0.1.1" # remember to bump the html_root_url as well
+version = "0.2.0" # remember to bump the html_root_url as well
 authors = ["Noam Ta Shma <noam.tashma@gmail.com>"]
 edition = "2018"
 keywords = ["recursive", "data-structures", "smart-pointer", "reference"]

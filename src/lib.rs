@@ -155,7 +155,7 @@
 //! Another important point to consider is the safety of
 //! the actual call to [`extend`][RecRef::extend]: see its documentation.
 #![no_std]
-#![doc(html_root_url = "https://docs.rs/recursive_reference/0.1.1/recursive_reference/")]
+#![doc(html_root_url = "https://docs.rs/recursive_reference/0.2.0/recursive_reference/")]
 
 extern crate alloc;
 use alloc::vec::*;
