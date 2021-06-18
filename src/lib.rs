@@ -1,15 +1,18 @@
 //! Recursive reference.
 //!
-//! This module provides a way to traverse recursive structures easily and safely.
-//! Rust's lifetime rules will usually force you to either only walk forward through recursive structures,
-//! or use recursion, calling your method recursively every time you go down a node,
-//! and returning every time you want to go back up.
+//!This crate provides a way to traverse recursive structures easily and safely.
+//!Rust's lifetime rules will usually force you to either only walk forward through the structure,
+//!or use recursion, calling your method recursively every time you go down a node,
+//!and returning every time you want to go back up, which leads to terrible code.
 //!
-//! Instead, you can use the [`RecRef`] type, to safely and dynamically walk up
-//! and down your recursive structure.
+//!Instead, you can use the [`RecRef`] type, to safely and dynamically walk up
+//!and down your recursive structure.
 //!
-//! Say we have a recursive linked list structure:
-//!```
+//!# Examples
+//!
+//! Say we have a recursive linked list structure
+//! ----------------------------------------------
+//!```rust
 //!enum List<T> {
 //!    Root(Box<Node<T>>),
 //!    Empty,
@@ -20,8 +23,9 @@
 //!}
 //!```
 //!
-//! We can use a [`RecRef`] directly:
-//!```
+//! We can use a [`RecRef`] directly
+//! ----------------------------------------------
+//!```rust
 //! # enum List<T> {
 //! # Root(Box<Node<T>>),
 //! # Empty,
@@ -37,7 +41,7 @@
 //!     let mut node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
 //!
 //!     let mut rec_ref = RecRef::new(&mut node2);
-//!     assert_eq!(rec_ref.value, 2); // rec_Ref is a smart pointer to the current node
+//!     assert_eq!(rec_ref.value, 2); // rec_ref is a smart pointer to the current node
 //!     rec_ref.value = 7; // change the value at the head of the list
 //!     RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
 //!         List::Root(next_node) => Ok(next_node),
@@ -58,11 +62,11 @@
 //! }
 //!```
 //!
-//! We can also wrap a [`RecRef`] in a struct allowing us to walk up and down
-//! our list
-//! (Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
-//! at the empty end of the list)
-//!```
+//! We can also wrap a [`RecRef`] in a walker struct
+//! ----------------------------------------------
+//! Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
+//! at the empty end of the list.
+//!```rust
 //! # enum List<T> {
 //! # Root(Box<Node<T>>),
 //! # Empty,
@@ -124,17 +128,19 @@
 //!     Ok(())
 //! }
 //!```
-//! [`RecRef`] works by storing internally a stack of references.
-//! You can do these toperations with a [`RecRef`]:
-//! * You can always use the current reference (i.e, the top reference).
+//! With a [`RecRef`] you can
+//! ----------------------------------------------
+//! * Use the current reference (i.e, the top reference).
 //!  the [`RecRef`] is a smart pointer to it.
-//! * using [`extend`][RecRef::extend] and similar functions, freeze the current reference
-//!  and extend the [`RecRef`] with a new reference derived from it.
+//! * Freeze the current reference
+//!  and extend the [`RecRef`] with a new reference derived from it, using [`extend`][RecRef::extend] and similar functions.
 //!  for example, push to the stack a reference to the child of the current node.
-//! * pop the stack to get back to the previous reference, unfreezing it.
+//! * Pop the stack to get back to the previous reference, unfreezing it.
 //!
 //! # Safety
 //! The [`RecRef`] type is implemented using unsafe rust, but provides a safe interface.
+//! The [`RecRef`] methods' types guarantee that the references will always have a legal lifetime
+//! and will respect rust's borrow rules, even if that lifetime is not known in advance.
 //!
 //! The [`RecRef`] obeys rust's borrowing rules, by simulating freezing. Whenever
 //! you extend a [`RecRef`] with a reference `child_ref` that is derived from the current
@@ -147,11 +153,7 @@
 //! but it's decoupled from the actual call stack.
 //!
 //! Another important point to consider is the safety of
-//! the actual call to [`extend`][RecRef::extend] : see its documentation.
-//!
-//! Internally, the [`RecRef`] keeps a stack of pointers, instead of reference, in order not
-//! to violate rust's aliasing invariants.
-
+//! the actual call to [`extend`][RecRef::extend]: see its documentation.
 #![no_std]
 #![doc(html_root_url = "https://docs.rs/recursive_reference/0.1.1/recursive_reference/")]
 
@@ -169,6 +171,20 @@ use void::ResultVoidExt;
 ///
 /// `RecRef<'a, T>` represents a reference to a value of type `T`, with lifetime `'a`,
 /// which can move recursively into and out of its subfields of the same type `T`.
+///
+/// With a [`RecRef`] you can
+/// ----------------------------------------------
+/// * Use the current reference (i.e, the top reference).
+///  the [`RecRef`] is a smart pointer to it.
+/// * Freeze the current reference
+///  and extend the [`RecRef`] with a new reference derived from it, using [`extend`][RecRef::extend] and similar functions.
+///  for example, push to the stack a reference to the child of the current node.
+/// * Pop the stack to get back to the previous reference, unfreezing it.
+///
+/// The methods' types guarantee that the references will always have a legal lifetime
+/// and will respect rust's borrow rules, even if that lifetime is not known in advance.
+///
+/// Internally, the [`RecRef`] stores a [`Vec`] of pointers, that it extends and pops from.
 pub struct RecRef<'a, T: ?Sized> {
     head: *mut T,
     vec: Vec<*mut T>,
@@ -401,15 +417,17 @@ impl<'a, T: ?Sized> From<&'a mut T> for RecRef<'a, T> {
 }
 
 /// # Safety:
-/// A [`RecRef`] acts like a `&mut T`, and contains a `Vec`.
-/// these are `Send` (`Vec<*mut T>` is not `Send` because
-/// it contains `*mut T`, but its implementation is still safe to send).
-/// Thus [`RecRef`] should be `Send`.
+/// Behaviorally, A [`RecRef`] is the same as `&'a mut T`, and
+/// should be [`Send`] for the same reason. Additionally, it contains a [`Vec`].
+/// The [`Send`] instance for [`Vec`] contains the bound `A: Send` for the allocator type `A`,
+/// so we should require that as well. However, we don't have direct access to the
+/// default allocator type. So instead we require `Vec<&'a mut T>: Send`.
 unsafe impl<'a, T: ?Sized + Send> Send for RecRef<'a, T> where Vec<&'a mut T>: Send {}
 
 /// # Safety:
-/// A [`RecRef`] acts like a `&mut T`, and contains a `Vec`.
-/// these are `Sync` (`Vec<*mut T>` is not `Sync` because
-/// it contains `*mut T`, but its implementation is still safe to sync).
-/// Thus [`RecRef`] should be `Sync`.
+/// Behaviorally, A [`RecRef`] is the same as `&'a mut T`, and
+/// should be [`Sync`] for the same reason. Additionally, it contains a [`Vec`].
+/// The [`Sync`] instance for [`Vec`] contains the bound `A: Sync` for the allocator type `A`,
+/// so we should require that as well. However, we don't have direct access to the
+/// default allocator type. So instead we require `Vec<&'a mut T>: Sync`.
 unsafe impl<'a, T: ?Sized + Sync> Sync for RecRef<'a, T> where Vec<&'a mut T>: Sync {}
