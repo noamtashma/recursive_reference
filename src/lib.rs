@@ -23,110 +23,123 @@
 //!}
 //!```
 //!
-//! We can use a [`RecRef`] directly
-//! ----------------------------------------------
+//!We can use a [`RecRef`] directly
+//!----------------------------------------------
 //!```rust
+//!use recursive_reference::*;
+//!
 //! # enum List<T> {
-//! # Root(Box<Node<T>>),
-//! # Empty,
+//! #    Root(Box<Node<T>>),
+//! #    Empty,
 //! # }
 //! # struct Node<T> {
-//! # value: T,
-//! # next: List<T>,
+//! #    value: T,
+//! #    next: List<T>,
 //! # }
-//! use recursive_reference::*;
 //!
-//! fn main() -> Result<(), ()> {
-//!     let node1 = Node { value : 5, next : List::Empty };
-//!     let mut node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
+//!fn main() -> Result<(), ()> {
+//!   // crate a list to test
+//!   let node1 = Node {
+//!       value: 5,
+//!       next: List::Empty,
+//!   };
+//!   let mut node2 = Node {
+//!       value: 2,
+//!       next: List::Root(Box::new(node1)),
+//!   };
 //!
-//!     let mut rec_ref = RecRef::new(&mut node2);
-//!     assert_eq!(rec_ref.value, 2); // rec_ref is a smart pointer to the current node
-//!     rec_ref.value = 7; // change the value at the head of the list
-//!     RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
-//!         List::Root(next_node) => Ok(next_node),
-//!         List::Empty => Err(()),
-//!     })?;
-//!     assert_eq!(rec_ref.value, 5);
-//!     // extend the RecRef
-//!     let res = RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
-//!         List::Root(next_node) => Ok(next_node),
-//!         List::Empty => Err(()),
-//!     });
-//!     assert_eq!(res, Err(())); // could not go forward because it reached the end of the list
-//!     assert_eq!(rec_ref.value, 5);
-//!     let last = RecRef::pop(&mut rec_ref).ok_or(())?;
-//!     assert_eq!(last.value, 5);
-//!     assert_eq!(rec_ref.value, 7) ; // moved back to the head of the list because we popped rec_ref
-//!     Ok(())
-//! }
+//!   // create a `RecRef`
+//!   let mut rec_ref = RecRef::new(&mut node2);
+//!   // rec_ref is a smart pointer to the current node
+//!   assert_eq!(rec_ref.value, 2);
+//!
+//!   // move forward through the list
+//!   RecRef::extend_result(&mut rec_ref, |node| match &mut node.next {
+//!       List::Root(next_node) => Ok(next_node),
+//!       List::Empty => Err(()),
+//!   })?;
+//!   assert_eq!(rec_ref.value, 5); // now we're at the second node
+//!
+//!   // pop the `RecRef`, moving it back to the head
+//!   RecRef::pop(&mut rec_ref).ok_or(())?;
+//!   assert_eq!(rec_ref.value, 2);
+//!   Ok(())
+//!}
 //!```
 //!
-//! We can also wrap a [`RecRef`] in a walker struct
-//! ----------------------------------------------
-//! Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
-//! at the empty end of the list.
+//!We can also wrap a [`RecRef`] in a walker struct
+//!----------------------------------------------
+//!Note: this time we are using a `RecRef<List<T>>` and not a `RecRef<Node<T>>`, to allow pointing
+//!at the empty end of the list.
 //!```rust
+//!use recursive_reference::*;
 //! # enum List<T> {
-//! # Root(Box<Node<T>>),
-//! # Empty,
+//! #    Root(Box<Node<T>>),
+//! #    Empty,
 //! # }
 //! # struct Node<T> {
-//! # value: T,
-//! # next: List<T>,
+//! #    value: T,
+//! #    next: List<T>,
 //! # }
-//! use recursive_reference::*;
-//! struct Walker<'a, T> {
-//!     rec_ref : RecRef<'a, List<T>>
-//! }
-//! impl<'a, T> Walker<'a, T> {
-//!     pub fn new(list: &'a mut List<T>) -> Self {
-//!         Walker {
-//!             rec_ref : RecRef::new(list)
-//!         }
-//!     }
+//!struct Walker<'a, T> {
+//!   rec_ref: RecRef<'a, Node<T>>,
+//!}
+//!impl<'a, T> Walker<'a, T> {
+//!   /// Crates a new Walker
+//!   pub fn new(node: &'a mut Node<T>) -> Self {
+//!       Walker {
+//!           rec_ref: RecRef::new(node),
+//!       }
+//!   }
 //!
-//!     /// Returns `None` when at the tail end of the list
-//!     pub fn next(&mut self) -> Option<()> {
-//!         RecRef::extend_result(&mut self.rec_ref, |current| match current {
-//!             List::Empty => Err(()),
-//!             List::Root(node) => Ok(&mut node.next),
-//!         }).ok()
-//!     }
+//!   /// Returns `None` when at the tail end of the list.
+//!   /// Moves to the next node.
+//!   pub fn next(&mut self) -> Option<()> {
+//!       RecRef::extend_result(&mut self.rec_ref, |current| match &mut current.next {
+//!           List::Empty => Err(()),
+//!           List::Root(node) => Ok(node),
+//!       })
+//!       .ok()
+//!   }
 //!
-//!     /// Returns `None` when at the head of the list
-//!     pub fn prev(&mut self) -> Option<()> {
-//!         RecRef::pop(&mut self.rec_ref)?;
-//!         Some(())
-//!     }
+//!   /// Returns `None` when at the head of the list.
+//!   /// Goes back to the previous node.
+//!   pub fn prev(&mut self) -> Option<()> {
+//!       RecRef::pop(&mut self.rec_ref)?;
+//!       Some(())
+//!   }
 //!
-//!     /// Returns `None` when at the tail end of the list
-//!     pub fn value_mut(&mut self) -> Option<&mut T> {
-//!         match &mut *self.rec_ref {
-//!             List::Root(node) => Some(&mut node.value),
-//!             List::Empty => None,
-//!         }
-//!     }
-//! }
+//!   /// Returns `None` when at the tail end of the list.
+//!   /// Returns `Some(reference)` where `reference` is a mutqable reference to the current value.
+//!   pub fn value_mut(&mut self) -> &mut T {
+//!       &mut self.rec_ref.value
+//!   }
+//!}
 //!
-//! fn main() -> Result<(), ()> {
-//!     let node1 = Node { value : 5, next : List::Empty };
-//!     let node2 = Node { value : 2, next : List::Root(Box::new(node1)) };
-//!     let mut list = List::Root(Box::new(node2));
+//!fn main() -> Result<(), ()> {
+//!   // crate a list to test
+//!   let node1 = Node {
+//!       value: 5,
+//!       next: List::Empty,
+//!   };
+//!   let mut node2 = Node {
+//!       value: 2,
+//!       next: List::Root(Box::new(node1)),
+//!   };
 //!
-//!     let mut walker = Walker::new(&mut list);
-//!     assert_eq!(walker.value_mut().cloned(), Some(2));
-//!     *walker.value_mut().ok_or(())? = 7;
-//!     walker.next().ok_or(())?;
-//!     assert_eq!(walker.value_mut().cloned(), Some(5));
-//!     walker.next().ok_or(())?;
-//!     assert_eq!(walker.value_mut().cloned(), None); // end of the list
-//!     walker.prev().ok_or(())?;
-//!     assert_eq!(walker.value_mut().cloned(), Some(5));
-//!     walker.prev().ok_or(())?;
-//!     assert_eq!(walker.value_mut().cloned(), Some(7)); // we changed the value at the head
-//!     Ok(())
-//! }
+//!   // create a walker for the list
+//!   let mut walker = Walker::new(&mut node2);
+//!   // walker has mutable access to the node value
+//!   assert_eq!(*walker.value_mut(), 2);
+//!   // move to the next node
+//!   walker.next().ok_or(())?;
+//!   assert_eq!(*walker.value_mut(), 5);
+//!   assert_eq!(walker.next(), None); // currently at the end of the list
+//!                                    // move back
+//!   walker.prev().ok_or(())?;
+//!   assert_eq!(*walker.value_mut(), 2);
+//!   Ok(())
+//!}
 //!```
 //! With a [`RecRef`] you can
 //! ----------------------------------------------
