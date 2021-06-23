@@ -161,8 +161,8 @@ extern crate alloc;
 use alloc::vec::*;
 
 use core::marker::PhantomData;
-use core::ops::Deref;
-use core::ops::DerefMut;
+use core::ops::{Deref, DerefMut};
+use core::ptr::NonNull;
 use void::ResultVoidExt;
 
 /// A Recursive reference.
@@ -186,24 +186,16 @@ use void::ResultVoidExt;
 ///
 /// Internally, the [`RecRef`] stores a [`Vec`] of pointers, that it extends and pops from.
 pub struct RecRef<'a, T: ?Sized> {
-    head: *mut T,
-    vec: Vec<*mut T>,
+    head: NonNull<T>,
+    vec: Vec<NonNull<T>>,
     phantom: PhantomData<&'a mut T>,
 }
-
-// TODO: consider converting the pointers to values without checking for null values.
-// it's supposed to work, since the pointers only ever come from references.
-// otherwise, when 1.53 rolls out, convert to `NonNull`.
-
-// these aren't ever supposed to happen. but since we touch unsafe code, we might as well
-// have clear error message when we `expect()`
-const NULL_POINTER_ERROR: &str = "error! somehow got null pointer";
 
 impl<'a, T: ?Sized> RecRef<'a, T> {
     /// Creates a new RecRef containing only a single reference.
     pub fn new(r: &'a mut T) -> Self {
         RecRef {
-            head: r as *mut T,
+            head: NonNull::from(r),
             vec: Vec::new(),
             phantom: PhantomData,
         }
@@ -284,7 +276,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
-        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
@@ -325,11 +317,11 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
-        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
-                rec_ref.head = p as *mut T;
+                rec_ref.head = NonNull::from(p);
                 Ok(())
             }
             Err(e) => Err(e),
@@ -342,7 +334,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// right type.
     pub fn push(rec_ref: &mut Self, r: &'a mut T) {
         rec_ref.vec.push(rec_ref.head);
-        rec_ref.head = r as *mut T;
+        rec_ref.head = NonNull::from(r);
 
         /* alternative definition using a call to `extend_result_precise`.
         // in order to name 'x, replace the signature with:
@@ -364,7 +356,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// If the [`RecRef`] has only one reference left, this returns `None`, because
     /// the [`RecRef`] can't be empty.
     pub fn pop(rec_ref: &mut Self) -> Option<&mut T> {
-        let res = unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR);
+        let res = unsafe { rec_ref.head.as_mut() };
         rec_ref.head = rec_ref.vec.pop()?; // We can't pop the original reference. In that case, Return None.
         Some(res)
     }
@@ -374,8 +366,8 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// * This will consume the [`RecRef`]
     /// * [`Self::pop`] will never pop the first original reference, because that would produce an
     ///   invalid [`RecRef`]. [`Self::into_ref`] will.
-    pub fn into_ref(rec_ref: Self) -> &'a mut T {
-        unsafe { rec_ref.head.as_mut() }.expect(NULL_POINTER_ERROR)
+    pub fn into_ref(mut rec_ref: Self) -> &'a mut T {
+        unsafe { rec_ref.head.as_mut() }
     }
 }
 
@@ -385,7 +377,7 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
 impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
-        unsafe { self.head.as_ref() }.expect(NULL_POINTER_ERROR)
+        unsafe { self.head.as_ref() }
     }
 }
 
@@ -394,7 +386,7 @@ impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
 /// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { self.head.as_mut() }.expect(NULL_POINTER_ERROR)
+        unsafe { self.head.as_mut() }
     }
 }
 
