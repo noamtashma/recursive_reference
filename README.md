@@ -157,10 +157,8 @@ fn main() -> Result<(), ()> {
  * Arena-based recursive data structures. That is, an arena is like a slab, that can't delete its elements, and can therefore give long-lasting references to its elements.
    * The nodes can't be freed until the whole structure is freed.
    * Your structure will be tied to the arena (you can't split parts of it and send them to another owner)
- * `GhostCell` based data structures.
-   * Litters your whole code with the `'brand` lifetime.
-   * Your structure will be tied to the `'brand` lifetime (you can't split parts of it and send them to another owner)
-   * Has to be arena/slab/Rc/static_rc based, and take on the corresponding method's downsides.
+ * There are also alternative cells in the `qcell` crate and the `ghost-cell` crate, and maybe even more
+   Interesting options.
  
  # [`RecRef`] Pros
  * [`RecRef`] can be used with any existing data structure, including any data structure
