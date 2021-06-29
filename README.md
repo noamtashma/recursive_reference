@@ -100,7 +100,7 @@ impl<'a, T> Walker<'a, T> {
     }
 
     /// Returns `None` when at the tail end of the list.
-    /// Returns `Some(reference)` where `reference` is a mutqable reference to the current value.
+    /// Returns `Some(reference)` where `reference` is a mutable reference to the current value.
     pub fn value_mut(&mut self) -> &mut T {
         &mut self.rec_ref.value
     }
