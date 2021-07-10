@@ -188,10 +188,10 @@ use void::ResultVoidExt;
 /// With a [`RecRef`] you can
 /// ----------------------------------------------
 /// * Use the current reference (i.e, the top reference).
-///  the [`RecRef`] is a smart pointer to it.
+///  The [`RecRef`] is a smart pointer to it.
 /// * Freeze the current reference
 ///  and extend the [`RecRef`] with a new reference derived from it, using [`extend`][RecRef::extend] and similar functions.
-///  for example, push to the stack a reference to the child of the current node.
+///  For example, push to the stack a reference to the child of the current node.
 /// * Pop the stack to get back to the previous reference, unfreezing it.
 ///
 /// The methods' types guarantee that the references will always have a legal lifetime
