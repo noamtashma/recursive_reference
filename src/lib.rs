@@ -198,6 +198,18 @@ use void::ResultVoidExt;
 /// and will respect rust's borrow rules, even if that lifetime is not known in advance.
 ///
 /// Internally, the [`RecRef`] stores a [`Vec`] of pointers, that it extends and pops from.
+
+// Safety invariants (please read `RecRef::extend`'s documentation before reading this):
+// The values in `vec` are allowed to alias. However:
+// For any index `i`, `vec[i]` can be safely used under these conditions:
+//    * all of the values in `vec[..i]` are considered frozen.
+//    * all of the values in `vec[i+1..]` are gone (e.g, if they are popped from the RecRef).
+//   In such a case `vec[i]` could be unfrozen, converted to a `&'x mut T` for any `'a : 'x` and used.
+// Specifically, this happens when the values in `vec[i+1..]` are references produced
+// through `vec[i]`.
+// See `RecRef::extend`'s documentation for more details on how this is ensured.
+//
+// In particular, all values in `vec` have been produced from valid mutable references `&mut T`.
 pub struct RecRef<'a, T: ?Sized> {
     head: NonNull<T>,
     vec: Vec<NonNull<T>>,
@@ -289,6 +301,13 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
+
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used.
+        // To understand how the invariant is ensured (and what it means)
+        // see `RecRef::extend`'s documentation.
         let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
@@ -330,6 +349,13 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
         // However, that is the "most correct" lifetime - the reference's actual lifetime may
         // be anything up to `'a`,
         // depending on whether the user will pop it earlier than that.
+
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used.
+        // To understand how the invariant is ensured (and what it means)
+        // see `RecRef::extend`'s documentation.
         let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
@@ -369,6 +395,12 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// If the [`RecRef`] has only one reference left, this returns `None`, because
     /// the [`RecRef`] can't be empty.
     pub fn pop(rec_ref: &mut Self) -> Option<&mut T> {
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used.
+        // Whenever it's used, `rec_ref` is frozen, preventing further
+        // access until this reference is dropped.
         let res = unsafe { rec_ref.head.as_mut() };
         rec_ref.head = rec_ref.vec.pop()?; // We can't pop the original reference. In that case, Return None.
         Some(res)
@@ -380,6 +412,12 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     /// * [`Self::pop`] will never pop the first original reference, because that would produce an
     ///   invalid [`RecRef`]. [`Self::into_ref`] will.
     pub fn into_ref(mut rec_ref: Self) -> &'a mut T {
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used with lifetime `'a`.
+        // `rec_ref` is consumed, preventing further
+        // access until this reference is dropped.
         unsafe { rec_ref.head.as_mut() }
     }
 }
@@ -390,6 +428,12 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
 impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used.
+        // Whenever it's used, `rec_ref` is borrowed immutably, preventing mutable
+        // access until this reference is dropped.
         unsafe { self.head.as_ref() }
     }
 }
@@ -399,6 +443,12 @@ impl<'a, T: ?Sized> Deref for RecRef<'a, T> {
 /// Therefore, it implements `Deref` and `DerefMut` with `Item=T`.
 impl<'a, T: ?Sized> DerefMut for RecRef<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
+        // Safety:
+        // This pointer was produced from a `&mut T`.
+        //
+        // By RecRef's safety invariant, this reference can be used.
+        // Whenever it's used, `rec_ref` is frozen, preventing further
+        // access until this reference is dropped.
         unsafe { self.head.as_mut() }
     }
 }
