@@ -294,21 +294,32 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
-        // The compiler is told explicitly that the lifetime is `'a`.
-        // Otherwise the minimal lifetime possible is chosen.
-        // It probably doesn't matter, since we specifically require `func` to be able to work
-        // with any lifetime, and the references are converted to pointers immediately.
-        // However, that is the "most correct" lifetime - the reference's actual lifetime may
-        // be anything up to `'a`,
-        // depending on whether the user will pop it earlier than that.
-
         // Safety:
-        // This pointer was produced from a `&mut T`.
+        // `rec_ref.head` was produced from a `&mut T`, and by RecRef's
+        // safety invariant, it can be used. Furthermore,
+        // Pushing another reference derived from it into the `rec_ref` preserves
+        // the safety invariant.
         //
-        // By RecRef's safety invariant, this reference can be used.
         // To understand how the invariant is ensured (and what it means)
         // see `RecRef::extend`'s documentation.
-        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
+        //
+        // However, there's another assumption here.
+        // The lifetime of the reference here is indeterminate.
+        // It could be any value. Thus by default the compiler will choose it
+        // to be extremely short, that is, only until where `NonNull::from` is called on it.
+        //
+        // In fact, we want this lifetime to be a lifetime we haven't chosen yet.
+        // It could be anything from as short as `'_` to as long as `'a`.
+        // I arbitrarily chose it to be set to `'_`.
+        //
+        // Essentially, we assume here that calling `func` will have the same effect
+        // even if we give it the wrong lifetime. In other words, we assume some form
+        // of parametricity.
+        // Semantically, this is true: code can't ever access the lifetimes. All lifetime
+        // information is deleted at compile time.
+        // However, we also assume that rust's optimizations
+        // won't change the program's meaning because we used the wrong lifetime.
+        let head_ref: &'_ mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
@@ -342,21 +353,33 @@ impl<'a, T: ?Sized> RecRef<'a, T> {
     where
         F: for<'b> FnOnce(&'b mut T, PhantomData<&'b &'a ()>) -> Result<&'b mut T, E>,
     {
-        // The compiler is told explicitly that the lifetime is `'a`.
-        // Otherwise the minimal lifetime possible is chosen.
-        // It probably doesn't matter, since we specifically require `func` to be able to work
-        // with any lifetime, and the references are converted to pointers immediately.
-        // However, that is the "most correct" lifetime - the reference's actual lifetime may
-        // be anything up to `'a`,
-        // depending on whether the user will pop it earlier than that.
-
         // Safety:
-        // This pointer was produced from a `&mut T`.
+        // `rec_ref.head` was produced from a `&mut T`, and by RecRef's
+        // safety invariant, it can be used. Furthermore,
+        // Pushing another reference derived from it into the `rec_ref` preserves
+        // the safety invariant.
         //
-        // By RecRef's safety invariant, this reference can be used.
         // To understand how the invariant is ensured (and what it means)
         // see `RecRef::extend`'s documentation.
-        let head_ref: &'a mut T = unsafe { rec_ref.head.as_mut() };
+        //
+        // However, there's another assumption here.
+        // The lifetime of the reference here is indeterminate.
+        // It could be any value. Thus by default the compiler will choose it
+        // to be extremely short, that is, only until where `NonNull::from` is called on it.
+        //
+        // In fact, we want this lifetime to be a lifetime we haven't chosen yet.
+        // It could be anything from as short as `'_` to as long as `'a`.
+        // I arbitrarily chose it to be set to `'_`.
+        //
+        // Essentially, we assume here that calling `func` will have the same effect
+        // even if we give it the wrong lifetime. In other words, we assume some form
+        // of parametricity.
+        // Semantically, this is true: code can't ever access the lifetimes. All lifetime
+        // information is deleted at compile time.
+        // However, we also assume that rust's optimizations
+        // won't change the program's meaning because we used the wrong lifetime.
+        
+        let head_ref: &'_ mut T = unsafe { rec_ref.head.as_mut() };
 
         match func(head_ref, PhantomData) {
             Ok(p) => {
